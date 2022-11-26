@@ -63,7 +63,7 @@ def fit_lgbm(trial, train, valid):
     }
 
     # Instanciando a parada antecipada do Optuna
-    pruning_callback = optuna.integration.lightGBMPruningCallback(trial, "multi_logloss", valid_name="valid_1")
+    pruning_callback = optuna.integration.LightGBMPruningCallback(trial, "multi_logloss", valid_name="valid_1")
 
     # Realizando a construção do modelo com a estrutra LGBM
     modelo = lgb.train(
@@ -75,7 +75,7 @@ def fit_lgbm(trial, train, valid):
     )
 
     # Fazendo previsões com o modelo criado acima
-    previsoes = modelo.predict(X_valid, num_iteration=modelo.best_iteration).armax(axis=1)
+    previsoes = modelo.predict(X_valid, num_iteration=modelo.best_iteration).argmax(axis=1)
 
     # Dicionário que armazenará as informações dos scores de treino e validação
     log = {
@@ -126,3 +126,14 @@ def objective(trial):
   # Retornando o erro da função objetivo
   return valid_score
 
+
+################################################################################
+# -= REALIZANDO A PESQUISA DE HIPERPARÂMETROS 🦅 =-
+
+# Definindo o tempo de pesquisa de hiperparâmetros
+tempo = 60 * 60 * 0.1  # 6 minutos
+print(f'Tempo de Pesquisa: {tempo / 60} min')
+
+# Criando um objeto de estudo do Optuna
+study = optuna.create_study(pruner=optuna.pruners.SuccessiveHalvingPruner(min_resource=2, reduction_factor=4, min_early_stopping_rate=1))
+study.optimize(objective, timeout=tempo)
