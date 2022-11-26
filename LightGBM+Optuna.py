@@ -1,14 +1,15 @@
 ################################################################################
-# -= PACOTES UTILIZADOS =-
+# -= PACOTES UTILIZADOS 🐈 =-
 import optuna
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 
 
 ################################################################################
-# -= CARGA DOS DADOS -= 
+# -= CARGA DOS DADOS 🦨 =- 
 def load_data():
 
   # Carregando o dataset direto da web
@@ -84,3 +85,44 @@ def fit_lgbm(trial, train, valid):
 
     # Retornando os dados do processo de treinamento e validação do modelo
     return modelo, previsoes, log
+
+
+################################################################################
+# -= DEFININDO A FUNÇÃO OBJECTIVE DO OPTUNA  🦏 =-
+
+def objective(trial):
+
+  # Lista que armazenará os modelos treinados
+  models = []
+
+  # Lista que armazenará as previsões de validação dos modelos
+  previsoes_valid = np.zeros(X_train.shape[0])
+
+  # Variável responsável por receber o erro (logloss) do modelo
+  valid_score = 0
+
+  # Instanciando o KFold
+  kf = KFold(n_splits=5)
+
+  # Aplicando a validação cruzada aos dados de treino
+  for train_idx, valid_idx in kf.split(X_train, Y_train):
+
+    # Armazenando os dados de treino e validação
+    train_data = X_train.iloc[train_idx], Y_train.iloc[train_idx]
+    valid_data = X_train.iloc[valid_idx], Y_train.iloc[valid_idx]
+
+    # Chamando a função criada acima (fit_lgbm)
+    modelo, previsoes, log = fit_lgbm(trial, train_data, valid_data)
+
+    # Adicionando o modelo treinado à lista de modelos
+    models.append(modelo)
+
+    # Somando o erro do modelo
+    valid_score += log["valid/multi_logloss"]
+
+  # Média dos erros 
+  valid_score /= len(models)
+
+  # Retornando o erro da função objetivo
+  return valid_score
+
