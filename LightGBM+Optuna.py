@@ -60,3 +60,27 @@ def fit_lgbm(trial, train, valid):
         "bagging_fraction": trial.suggest_float("bagging_fraction", 0.1, 1.0),
         "bagging_freq":     trial.suggest_int("bagging_freq", 1, 10)
     }
+
+    # Instanciando a parada antecipada do Optuna
+    pruning_callback = optuna.integration.lightGBMPruningCallback(trial, "multi_logloss", valid_name="valid_1")
+
+    # Realizando a construção do modelo com a estrutra LGBM
+    modelo = lgb.train(
+      params=params,
+      train_set=dtrain,
+      valid_sets=[dtrain, dvalid],
+      early_stopping_rounds=20,
+      callbacks=[pruning_callback]
+    )
+
+    # Fazendo previsões com o modelo criado acima
+    previsoes = modelo.predict(X_valid, num_iteration=modelo.best_iteration).armax(axis=1)
+
+    # Dicionário que armazenará as informações dos scores de treino e validação
+    log = {
+      "train/multi_logloss": modelo.best_score["training"]["multi_logloss"],
+      "valid/multi_logloss": modelo.best_score["valid_1"]["multi_logloss"]
+    }
+
+    # Retornando os dados do processo de treinamento e validação do modelo
+    return modelo, previsoes, log
