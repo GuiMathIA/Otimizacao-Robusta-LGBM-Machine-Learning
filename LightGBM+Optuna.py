@@ -38,93 +38,82 @@ X_train, X_test, Y_train, Y_test = train_test_split(dados.drop(columns=["variety
 
 def fit_lgbm(trial, train, valid):
 
-    # Desempacotando os dados para treino e validação
-    X_train, Y_train = train
-    X_valid, Y_valid = valid
+  # Desempacotando os dados para treino e validação do modelo
+  X_train, Y_train = train
+  X_valid, Y_valid = valid
 
-    # Transformando os dados em um tipo específico do LGBM
-    dtrain = lgb.Dataset(data=X_train, label=Y_train)
-    dvalid = lgb.Dataset(data=X_valid, label=Y_valid)
+  # Transformando os dados em um tipo específico do LGBM
+  dtrain = lgb.Dataset(data=X_train, label=Y_train)
+  dvalid = lgb.Dataset(data=X_valid, label=Y_valid)
 
-    # Definindo o espaço de pesquisa dos hiperparâmetros
-    params = {
-        "objective":        "multiclass",
-        "metric":           "multi_logloss",
-        "num_class":        3,
-        "boosting":         "gbdt",
-        "verbosity":        -1,
-        "learning_rate":    trial.suggest_float("learning_rate", 0.01, 0.1),
-        "num_leaves":       trial.suggest_int("num_leaves", 2, 256),
-        "lambda_l1":        trial.suggest_float("lambda_l1", 1e-8, 10.0),
-        "lambda_l2":        trial.suggest_float("lambda_l2", 1e-8, 10.0),
-        "feature_fraction": trial.suggest_float("feature_fraction", 0.1, 1.0),
-        "bagging_fraction": trial.suggest_float("bagging_fraction", 0.1, 1.0),
-        "bagging_freq":     trial.suggest_int("bagging_freq", 1, 10)
-    }
+  # Definindo o espaço de pesquisa dos hiperparâmetros
+  params = {
+      "objective":        "multiclass",
+      "metric":           "multi_logloss",
+      "boosting":         "gbdt",
+      "seed":             1223,
+      "verbosity":        -1,
+      "num_class":        3,
+      "learning_rate":    trial.suggest_float("learning_rate", 0.01, 0.1),
+      "num_leaves":       trial.suggest_int("num_leaves", 2, 256),
+      "lambda_l1":        trial.suggest_float("lambda_l1", 1e-8, 10.0, log=True),
+      "lambda_l2":        trial.suggest_float("lambda_l2", 1e-8, 10.0, log=True),
+      "feature_fraction": trial.suggest_float("feature_fraction", 0.1, 1.0),
+      "bagging_fraction": trial.suggest_float("bagging_fraction", 0.1, 1.0),
+      "bagging_freq":     trial.suggest_int("bagging_freq", 1, 10)
+  }
 
-    # Instanciando a parada antecipada do Optuna
-    pruning_callback = optuna.integration.LightGBMPruningCallback(trial, "multi_logloss", valid_name="valid_1")
+  # Instanciando a poda integrada do Optuna
+  pruning_callback = optuna.integration.LightGBMPruningCallback(trial, "multi_logloss", valid_name="valid_1")
 
-    # Realizando a construção do modelo com a estrutra LGBM
-    modelo = lgb.train(
+  # Realizando o treinamento com o algoritmo LGBM
+  modelo = lgb.train(
       params=params,
       train_set=dtrain,
       valid_sets=[dtrain, dvalid],
       early_stopping_rounds=20,
       callbacks=[pruning_callback]
-    )
+  )
 
-    # Fazendo previsões com o modelo criado acima
-    previsoes = modelo.predict(X_valid, num_iteration=modelo.best_iteration).argmax(axis=1)
-
-    # Dicionário que armazenará as informações dos scores de treino e validação
-    log = {
+  # Salvando os resultados de treinamento e validação do modelo
+  log = {
       "train/multi_logloss": modelo.best_score["training"]["multi_logloss"],
       "valid/multi_logloss": modelo.best_score["valid_1"]["multi_logloss"]
-    }
+  }
 
-    # Retornando os dados do processo de treinamento e validação do modelo
-    return modelo, previsoes, log
+  # Retornando todas as informações do processo de pesquisa dos hiperparâmetros
+  return log
+
+
 
 
 ################################################################################
 # -= DEFININDO A FUNÇÃO OBJECTIVE DO OPTUNA  🦏 =-
 
+# Criando função objetivo do Optuna
 def objective(trial):
 
-  # Lista que armazenará os modelos treinados
-  models = []
+  # Definindo o número de K-Folds para a validação cruzada
+  kf = KFold(n_splits=5, shuffle=True, random_state=1223)
 
-  # Lista que armazenará as previsões de validação dos modelos
-  previsoes_valid = np.zeros(X_train.shape[0])
-
-  # Variável responsável por receber o erro (logloss) do modelo
+  # Definindo a variável que armazenará o score de validação dos modelos
   valid_score = 0
 
-  # Instanciando o KFold
-  kf = KFold(n_splits=5)
-
-  # Aplicando a validação cruzada aos dados de treino
+  # Aplicando uma validação cruzada
   for train_idx, valid_idx in kf.split(X_train, Y_train):
 
-    # Armazenando os dados de treino e validação
+    # Empacotando os dados para treino e validação
     train_data = X_train.iloc[train_idx], Y_train.iloc[train_idx]
     valid_data = X_train.iloc[valid_idx], Y_train.iloc[valid_idx]
 
-    # Chamando a função criada acima (fit_lgbm)
-    modelo, previsoes, log = fit_lgbm(trial, train_data, valid_data)
+    # Chamando a função para treinar o modelo com o algoritmo LGBM
+    log = fit_lgbm(trial, train_data, valid_data)
 
-    # Adicionando o modelo treinado à lista de modelos
-    models.append(modelo)
-
-    # Somando o erro do modelo
+    # Salvando o erro do modelo
     valid_score += log["valid/multi_logloss"]
 
-  # Média dos erros 
-  valid_score /= len(models)
-
-  # Retornando o erro da função objetivo
-  return valid_score
+  # Retornando a métrica de otimização para a função objective
+  return valid_score / 5
 
 
 ################################################################################
