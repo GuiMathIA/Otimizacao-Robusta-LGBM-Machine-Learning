@@ -84,9 +84,6 @@ def fit_lgbm(trial, train, valid):
   # Retornando todas as informações do processo de pesquisa dos hiperparâmetros
   return log
 
-
-
-
 ################################################################################
 # -= DEFININDO A FUNÇÃO OBJECTIVE DO OPTUNA  🦏 =-
 
